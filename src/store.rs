@@ -1,9 +1,9 @@
-use std::{collections::HashMap, sync::Arc};
 use playwright_rs::{LaunchOptions, Playwright};
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::model::{Session};
+use crate::model::Session;
 
 #[derive(Clone)]
 pub struct SessionStore {
@@ -23,10 +23,16 @@ impl SessionStore {
     pub async fn start_session(&self) -> Result<Uuid, playwright_rs::Error> {
         let chromium = self.playwright.chromium();
         let browser = chromium
-            .launch_with_options(LaunchOptions::new().headless(false)).await?;
+            .launch_with_options(LaunchOptions::new().headless(false))
+            .await?;
         let id = Uuid::new_v4();
-        self.sessions.write().await
-            .insert(id, Arc::new(RwLock::new(Session { browser, current_page: None })));
+        self.sessions.write().await.insert(
+            id,
+            Arc::new(RwLock::new(Session {
+                browser,
+                current_page: None,
+            })),
+        );
         Ok(id)
     }
 

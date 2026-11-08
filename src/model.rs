@@ -20,4 +20,13 @@ pub struct NavigateParams {
     #[serde(rename = "sessionId")]
     pub session_id: Uuid,
     pub url: String,
+    #[serde(rename = "waitForLoaded")]
+    pub wait_for_loaded: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ElementParams {
+    #[serde(rename = "sessionId")]
+    pub session_id: Uuid,
+    pub locator: String,
 }
