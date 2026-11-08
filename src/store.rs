@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::model::Session;
+use crate::model::{Session, SessionMeta};
 
 #[derive(Clone)]
 pub struct SessionStore {
@@ -20,10 +20,10 @@ impl SessionStore {
         })
     }
 
-    pub async fn start_session(&self) -> Result<Uuid, playwright_rs::Error> {
+    pub async fn start_session(&self, meta: SessionMeta) -> Result<Uuid, playwright_rs::Error> {
         let chromium = self.playwright.chromium();
         let browser = chromium
-            .launch_with_options(LaunchOptions::new().headless(false))
+            .launch_with_options(LaunchOptions::new().headless(meta.headless))
             .await?;
         let page = match browser.new_page().await {
             Ok(page) => page,
@@ -34,11 +34,18 @@ impl SessionStore {
                 return Err(error);
             }
         };
+        page.set_default_navigation_timeout(meta.global_wait_timeout)
+            .await;
+        page.set_default_timeout(meta.global_element_timeout).await;
         let id = Uuid::new_v4();
-        self.sessions
-            .write()
-            .await
-            .insert(id, Arc::new(RwLock::new(Session { browser, page })));
+        self.sessions.write().await.insert(
+            id,
+            Arc::new(RwLock::new(Session {
+                browser,
+                page,
+                meta,
+            })),
+        );
         Ok(id)
     }
 

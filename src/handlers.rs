@@ -1,7 +1,7 @@
 use crate::errors::{internal_error, internal_error_with_message, invalid_params};
-use crate::model::{ElementParams, NavigateParams, Session, SessionParams};
+use crate::model::{ElementParams, NavigateParams, Session, SessionMeta, SessionParams};
 use crate::store::SessionStore;
-use playwright_rs::WaitForOptions;
+use playwright_rs::{ClickOptions, WaitForOptions};
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{Implementation, ServerCapabilities, ServerInfo},
@@ -34,10 +34,17 @@ impl BrowserToolServer {
 impl BrowserToolServer {
     #[tool(
         name = "start_session",
-        description = "Starts a session. Returns JSON with fields: sessionId."
+        description = "Starts a session with metadata: \
+        headless (optional, default to false), \
+        globalWaitTimeout (optional, default to 30000.0), \
+        globalElementTimeout (optional, default to 30000.0). \
+        Returns JSON with fields: sessionId."
     )]
-    async fn start_session(&self) -> Result<rmcp::Json<SessionParams>, McpError> {
-        match self.store.start_session().await {
+    async fn start_session(
+        &self,
+        Parameters(meta): Parameters<SessionMeta>,
+    ) -> Result<rmcp::Json<SessionParams>, McpError> {
+        match self.store.start_session(meta).await {
             Ok(uuid) => Ok(rmcp::Json(SessionParams { session_id: uuid })),
             Err(error) => Err(internal_error_with_message(format!(
                 "Session start failed with '{error}'"
@@ -65,7 +72,12 @@ impl BrowserToolServer {
 
     #[tool(
         name = "navigate",
-        description = "Navigates to a page by its URL (url)."
+        description = "Navigates to a page by its URL (url), \
+        then waits for the loaded element by its locator (waitForLoaded) - \
+        a Playwright selector: CSS, XPath (a string starting with //, \
+        e.g. //a[@id='login']), or text=. \
+        waitTimeout (optional, default to the session's globalWaitTimeout, ms) \
+        bounds the element wait; the navigation itself is bounded by globalWaitTimeout."
     )]
     async fn navigate(
         &self,
@@ -74,12 +86,24 @@ impl BrowserToolServer {
         let session = self.get_session(params.session_id).await?;
         let mut session_guard = session.write().await;
 
+        let wait_timeout = params
+            .wait_timeout
+            .unwrap_or(session_guard.meta.global_wait_timeout);
+
         if session_guard.page.is_closed() {
             session_guard.page = session_guard
                 .browser
                 .new_page()
                 .await
                 .map_err(internal_error)?;
+            session_guard
+                .page
+                .set_default_navigation_timeout(session_guard.meta.global_wait_timeout)
+                .await;
+            session_guard
+                .page
+                .set_default_timeout(session_guard.meta.global_element_timeout)
+                .await;
         }
 
         session_guard
@@ -90,7 +114,7 @@ impl BrowserToolServer {
         session_guard
             .page
             .locator(params.wait_for_loaded)
-            .wait_for(WaitForOptions::builder().timeout(4000.0).build())
+            .wait_for(WaitForOptions::builder().timeout(wait_timeout).build())
             .await
             .map_err(internal_error)?;
         Ok(())
@@ -98,16 +122,24 @@ impl BrowserToolServer {
 
     #[tool(
         name = "click",
-        description = "Clicks an element by its Locator (locator)."
+        description = "Clicks an element by its locator (locator) - \
+        a Playwright selector: CSS, XPath (a string starting with //, \
+        e.g. //a[@id='login']), or text=. \
+        elementTimeout (optional, default to the session's globalElementTimeout, ms) \
+        bounds the click."
     )]
     async fn click(&self, Parameters(params): Parameters<ElementParams>) -> Result<(), McpError> {
         let session = self.get_session(params.session_id).await?;
         let session_guard = session.write().await;
 
+        let element_timeout = params
+            .element_timeout
+            .unwrap_or(session_guard.meta.global_element_timeout);
+
         session_guard
             .page
             .locator(params.locator)
-            .click(None)
+            .click(ClickOptions::builder().timeout(element_timeout).build())
             .await
             .map_err(internal_error)?;
         Ok(())
