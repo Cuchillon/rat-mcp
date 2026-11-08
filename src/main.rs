@@ -12,7 +12,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = BrowserToolServer::new().await?;
     let (stdin, stdout) = stdio();
     let running = server.clone().serve((stdin, stdout)).await?;
-    running.waiting().await?;
+    let result = running.waiting().await;
     server.close_all().await;
+    result?;
     Ok(())
 }
