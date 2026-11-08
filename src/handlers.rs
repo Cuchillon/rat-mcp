@@ -76,18 +76,25 @@ impl BrowserToolServer {
         let session = self.get_session(params.session_id).await?;
         let mut session_guard = session.write().await;
 
-        let page = session_guard
-            .browser
-            .new_page()
+        if session_guard.page.is_closed() {
+            session_guard.page = session_guard
+                .browser
+                .new_page()
+                .await
+                .map_err(internal_error)?;
+        }
+
+        session_guard
+            .page
+            .goto(&params.url, None)
             .await
             .map_err(internal_error)?;
-        page.goto(&params.url, None).await.map_err(internal_error)?;
-        page.locator(params.wait_for_loaded)
+        session_guard
+            .page
+            .locator(params.wait_for_loaded)
             .wait_for(WaitForOptions::builder().timeout(4000.0).build())
             .await
             .map_err(internal_error)?;
-
-        session_guard.current_page = Some(page);
         Ok(())
     }
 
@@ -99,12 +106,9 @@ impl BrowserToolServer {
         let session = self.get_session(params.session_id).await?;
         let session_guard = session.write().await;
 
-        let page = session_guard
-            .current_page
-            .as_ref()
-            .ok_or_else(|| invalid_params("No page in session, call 'navigate' first"))?;
-
-        page.locator(params.locator)
+        session_guard
+            .page
+            .locator(params.locator)
             .click(None)
             .await
             .map_err(internal_error)?;

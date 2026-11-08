@@ -6,7 +6,7 @@ use uuid::Uuid;
 #[derive(Debug)]
 pub struct Session {
     pub browser: Browser,
-    pub current_page: Option<Page>,
+    pub page: Page,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

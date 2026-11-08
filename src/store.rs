@@ -25,14 +25,20 @@ impl SessionStore {
         let browser = chromium
             .launch_with_options(LaunchOptions::new().headless(false))
             .await?;
+        let page = match browser.new_page().await {
+            Ok(page) => page,
+            Err(error) => {
+                if let Err(close_error) = browser.close().await {
+                    eprintln!("Failed to close browser after page creation error: {close_error}");
+                }
+                return Err(error);
+            }
+        };
         let id = Uuid::new_v4();
-        self.sessions.write().await.insert(
-            id,
-            Arc::new(RwLock::new(Session {
-                browser,
-                current_page: None,
-            })),
-        );
+        self.sessions
+            .write()
+            .await
+            .insert(id, Arc::new(RwLock::new(Session { browser, page })));
         Ok(id)
     }
 
