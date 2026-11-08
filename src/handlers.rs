@@ -53,15 +53,13 @@ impl BrowserToolServer {
         &self,
         Parameters(params): Parameters<SessionParams>,
     ) -> Result<(), McpError> {
-        match self.store.end_session(params.session_id).await {
-            Ok(true) => Ok(()),
-            Ok(false) => Err(invalid_params(format!(
+        if self.store.end_session(params.session_id).await {
+            Ok(())
+        } else {
+            Err(invalid_params(format!(
                 "No session with id '{}'",
                 params.session_id
-            ))),
-            Err(error) => Err(internal_error_with_message(format!(
-                "Session end failed with '{error}'"
-            ))),
+            )))
         }
     }
 

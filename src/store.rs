@@ -42,13 +42,14 @@ impl SessionStore {
         Ok(id)
     }
 
-    pub async fn end_session(&self, id: Uuid) -> Result<bool, playwright_rs::Error> {
+    pub async fn end_session(&self, id: Uuid) -> bool {
         let Some(session) = self.sessions.write().await.remove(&id) else {
-            return Ok(false);
+            return false;
         };
-        let session_guard = session.write().await;
-        session_guard.browser.close().await?;
-        Ok(true)
+        if let Err(error) = session.write().await.browser.close().await {
+            eprintln!("Failed to close browser on session end: {error}");
+        }
+        true
     }
 
     pub async fn get_session(&self, id: Uuid) -> Option<Arc<RwLock<Session>>> {
